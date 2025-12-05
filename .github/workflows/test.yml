@@ -1,0 +1,60 @@
+name: Test
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Find pending runs for PR #1
+        id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${REPO}/actions/runs?event=pull_request&status=action_required&head_sha=${SHA}" \
+            --jq '.workflow_runs[].id' > runs.txt
+          echo "runs=$(cat runs.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+
+      - name: Approve runs
+        if: steps.find.outputs.runs != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          for run_id in ${{ steps.find.outputs.runs }}; do
+            echo "Approving run $run_id"
+            gh api \
+              -X POST \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${REPO}/actions/runs/${run_id}/approve"
+          done
+
+      - name: Create/force tag "abc" at PR #1 head
+        run: |
+          git fetch origin pull/1/merge
+          #git tag -f abc FETCH_HEAD
+          #git push origin -f refs/tags/abc
+
+      - name: Trigger "WFD" on tag "abc"
+        run: |
+          gh workflow run "WFD" --ref abc
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+
+      - name: Env
+        run: |
+          # echo "hello" > .github/workflows/test3.yml
+          # git add .github/workflows/test3.yml
+          # git config --global user.name "github-actions"
+          ## git config --global user.email "github-actions@github.com"
+          # git fetch origin b15fe2dda5bfd9f9f93423f0c6d883f15d3d90e4
+          # git checkout b15fe2dda5bfd9f9f93423f0c6d883f15d3d90e4
+          # git switch -c testbranch5
+          # git push origin HEAD:testbranch5
+          echo Done
